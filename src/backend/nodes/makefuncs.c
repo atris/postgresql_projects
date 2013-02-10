@@ -508,3 +508,23 @@ makeDefElemExtended(char *nameSpace, char *name, Node *arg,
 
 	return res;
 }
+
+/*
+ * makeFuncCall -
+ *  set up to call a function. DRY!
+ */
+FuncCall *
+makeFuncCall(List *name, List *args, int location)
+{
+	FuncCall *n = makeNode(FuncCall);
+	n->funcname = name;
+	n->args = args;
+	n->location = location;
+	n->agg_order = NIL;
+	n->agg_star = FALSE;
+	n->agg_distinct = FALSE;
+	n->func_variadic = FALSE;
+	n->over = NULL;
+	return n;
+}
+

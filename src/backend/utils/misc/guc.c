@@ -122,6 +122,7 @@ extern int	CommitDelay;
 extern int	CommitSiblings;
 extern char *default_tablespace;
 extern char *temp_tablespaces;
+extern bool ignore_checksum_failure;
 extern bool synchronize_seqscans;
 extern int	ssl_renegotiation_limit;
 extern char *SSLCipherSuites;
@@ -805,6 +806,21 @@ static struct config_bool ConfigureNamesBool[] =
 		},
 		&enableFsync,
 		true,
+		NULL, NULL, NULL
+	},
+	{
+		{"ignore_checksum_failure", PGC_SUSET, DEVELOPER_OPTIONS,
+			gettext_noop("Continues processing after a checksum failure."),
+			gettext_noop("Detection of a checksum failure normally causes PostgreSQL to "
+				"report an error, aborting the current transaction. Setting "
+						 "ignore_checksum_failure to true causes the system to ignore the failure "
+						 "(but still report a warning), and continue processing. This "
+						 "behavior could cause crashes or other serious problems. Only "
+						 "has an effect if checksums are enabled."),
+			GUC_NOT_IN_SAMPLE
+		},
+		&ignore_checksum_failure,
+		false,
 		NULL, NULL, NULL
 	},
 	{
@@ -1862,6 +1878,17 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
+		{"lock_timeout", PGC_USERSET, CLIENT_CONN_STATEMENT,
+			gettext_noop("Sets the maximum allowed duration of any wait for a lock."),
+			gettext_noop("A value of 0 turns off the timeout."),
+			GUC_UNIT_MS
+		},
+		&LockTimeout,
+		0, 0, INT_MAX,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"vacuum_freeze_min_age", PGC_USERSET, CLIENT_CONN_STATEMENT,
 			gettext_noop("Minimum age at which VACUUM should freeze a table row."),
 			NULL
@@ -2031,7 +2058,7 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"commit_delay", PGC_USERSET, WAL_SETTINGS,
+		{"commit_delay", PGC_SUSET, WAL_SETTINGS,
 			gettext_noop("Sets the delay in microseconds between transaction commit and "
 						 "flushing WAL to disk."),
 			NULL
@@ -8705,14 +8732,23 @@ static void
 assign_pgstat_temp_directory(const char *newval, void *extra)
 {
 	/* check_canonical_path already canonicalized newval for us */
+	char	   *dname;
 	char	   *tname;
 	char	   *fname;
 
-	tname = guc_malloc(ERROR, strlen(newval) + 12);		/* /pgstat.tmp */
-	sprintf(tname, "%s/pgstat.tmp", newval);
-	fname = guc_malloc(ERROR, strlen(newval) + 13);		/* /pgstat.stat */
-	sprintf(fname, "%s/pgstat.stat", newval);
+	/* directory */
+	dname = guc_malloc(ERROR, strlen(newval) + 1);		/* runtime dir */
+	sprintf(dname, "%s", newval);
 
+	/* global stats */
+	tname = guc_malloc(ERROR, strlen(newval) + 12);		/* /global.tmp */
+	sprintf(tname, "%s/global.tmp", newval);
+	fname = guc_malloc(ERROR, strlen(newval) + 13);		/* /global.stat */
+	sprintf(fname, "%s/global.stat", newval);
+
+	if (pgstat_stat_directory)
+		free(pgstat_stat_directory);
+	pgstat_stat_directory = dname;
 	if (pgstat_stat_tmpname)
 		free(pgstat_stat_tmpname);
 	pgstat_stat_tmpname = tname;

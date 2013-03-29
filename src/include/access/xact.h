@@ -28,7 +28,7 @@
 #define XACT_SERIALIZABLE		3
 
 extern int	DefaultXactIsoLevel;
-extern int	XactIsoLevel;
+extern PGDLLIMPORT int XactIsoLevel;
 
 /*
  * We implement three isolation levels internally.
@@ -215,6 +215,7 @@ extern TransactionId GetCurrentTransactionId(void);
 extern TransactionId GetCurrentTransactionIdIfAny(void);
 extern TransactionId GetStableLatestTransactionId(void);
 extern SubTransactionId GetCurrentSubTransactionId(void);
+extern bool SubTransactionIsActive(SubTransactionId subxid);
 extern CommandId GetCurrentCommandId(bool used);
 extern TimestampTz GetCurrentTransactionStartTimestamp(void);
 extern TimestampTz GetCurrentStatementStartTimestamp(void);

@@ -46,7 +46,8 @@ extern Relation heap_create(const char *relname,
 			char relkind,
 			char relpersistence,
 			bool shared_relation,
-			bool mapped_relation);
+			bool mapped_relation,
+			bool allow_system_table_mods);
 
 extern Oid heap_create_with_catalog(const char *relname,
 						 Oid relnamespace,
@@ -70,7 +71,6 @@ extern Oid heap_create_with_catalog(const char *relname,
 						 bool is_internal);
 
 extern void heap_create_init_fork(Relation rel);
-extern bool heap_is_matview_init_state(Relation rel);
 
 extern void heap_drop_with_catalog(Oid relid);
 
@@ -100,7 +100,7 @@ extern List *AddRelationNewConstraints(Relation rel,
 						  bool is_internal);
 
 extern void StoreAttrDefault(Relation rel, AttrNumber attnum,
-							 Node *expr, bool is_internal);
+				 Node *expr, bool is_internal);
 
 extern Node *cookDefault(ParseState *pstate,
 			Node *raw_default,

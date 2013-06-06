@@ -56,7 +56,7 @@ static void rewriteValuesRTE(RangeTblEntry *rte, Relation target_relation,
 static void rewriteTargetListUD(Query *parsetree, RangeTblEntry *target_rte,
 					Relation target_relation);
 static void markQueryForLocking(Query *qry, Node *jtnode,
-					LockClauseStrength strength, bool noWait, bool pushedDown);
+				  LockClauseStrength strength, bool noWait, bool pushedDown);
 static List *matchLocks(CmdType event, RuleLock *rulelocks,
 		   int varno, Query *parsetree);
 static Query *fireRIRrules(Query *parsetree, List *activeRIRs,
@@ -131,9 +131,9 @@ AcquireRewriteLocks(Query *parsetree, bool forUpdatePushedDown)
 				 *
 				 * If the relation is the query's result relation, then we
 				 * need RowExclusiveLock.  Otherwise, check to see if the
-				 * relation is accessed FOR [KEY] UPDATE/SHARE or not.  We can't
-				 * just grab AccessShareLock because then the executor would
-				 * be trying to upgrade the lock, leading to possible
+				 * relation is accessed FOR [KEY] UPDATE/SHARE or not.	We
+				 * can't just grab AccessShareLock because then the executor
+				 * would be trying to upgrade the lock, leading to possible
 				 * deadlocks.
 				 */
 				if (rt_index == parsetree->resultRelation)
@@ -1375,8 +1375,8 @@ ApplyRetrieveRule(Query *parsetree,
 	}
 
 	/*
-	 * If FOR [KEY] UPDATE/SHARE of view, be sure we get right initial lock on the
-	 * relations it references.
+	 * If FOR [KEY] UPDATE/SHARE of view, be sure we get right initial lock on
+	 * the relations it references.
 	 */
 	rc = get_parse_rowmark(parsetree, rt_index);
 	forUpdatePushedDown |= (rc != NULL);
@@ -1423,9 +1423,9 @@ ApplyRetrieveRule(Query *parsetree,
 	rte->modifiedCols = NULL;
 
 	/*
-	 * If FOR [KEY] UPDATE/SHARE of view, mark all the contained tables as implicit
-	 * FOR [KEY] UPDATE/SHARE, the same as the parser would have done if the view's
-	 * subquery had been written out explicitly.
+	 * If FOR [KEY] UPDATE/SHARE of view, mark all the contained tables as
+	 * implicit FOR [KEY] UPDATE/SHARE, the same as the parser would have done
+	 * if the view's subquery had been written out explicitly.
 	 *
 	 * Note: we don't consider forUpdatePushedDown here; such marks will be
 	 * made by recursing from the upper level in markQueryForLocking.
@@ -1580,6 +1580,19 @@ fireRIRrules(Query *parsetree, List *activeRIRs, bool forUpdatePushedDown)
 			continue;
 
 		/*
+		 * Always ignore RIR rules for materialized views referenced in
+		 * queries.  (This does not prevent refreshing MVs, since they aren't
+		 * referenced in their own query definitions.)
+		 *
+		 * Note: in the future we might want to allow MVs to be conditionally
+		 * expanded as if they were regular views, if they are not scannable.
+		 * In that case this test would need to be postponed till after we've
+		 * opened the rel, so that we could check its state.
+		 */
+		if (rte->relkind == RELKIND_MATVIEW)
+			continue;
+
+		/*
 		 * If the table is not referenced in the query, then we ignore it.
 		 * This prevents infinite expansion loop due to new rtable entries
 		 * inserted by expansion of a rule. A table is referenced if it is
@@ -1603,23 +1616,6 @@ fireRIRrules(Query *parsetree, List *activeRIRs, bool forUpdatePushedDown)
 		 * AcquireRewriteLocks should have locked the rel already.
 		 */
 		rel = heap_open(rte->relid, NoLock);
-
-		/*
-		 * Ignore RIR rules for a materialized view, if it is scannable.
-		 *
-		 * NOTE: This is assuming that if an MV is scannable then we always
-		 * want to use the existing contents, and if it is not scannable we
-		 * cannot have gotten to this point unless it is being populated
-		 * (otherwise an error should be thrown).  It would be nice to have
-		 * some way to confirm that we're doing the right thing here, but rule
-		 * expansion doesn't give us a lot to work with, so we are trusting
-		 * earlier validations to throw error if needed.
-		 */
-		if (rel->rd_rel->relkind == RELKIND_MATVIEW && rel->rd_isscannable)
-		{
-			heap_close(rel, NoLock);
-			continue;
-		}
 
 		/*
 		 * Collect the RIR rules that we must apply
@@ -1988,7 +1984,7 @@ view_is_auto_updatable(Relation view)
 		return gettext_noop("Views containing HAVING are not automatically updatable.");
 
 	if (viewquery->setOperations != NULL)
-		return gettext_noop("Views containing UNION, INTERSECT or EXCEPT are not automatically updatable.");
+		return gettext_noop("Views containing UNION, INTERSECT, or EXCEPT are not automatically updatable.");
 
 	if (viewquery->cteList != NIL)
 		return gettext_noop("Views containing WITH are not automatically updatable.");
@@ -2093,9 +2089,9 @@ relation_is_updatable(Oid reloid, int req_events)
 
 	/*
 	 * If the relation doesn't exist, say "false" rather than throwing an
-	 * error.  This is helpful since scanning an information_schema view
-	 * under MVCC rules can result in referencing rels that were just
-	 * deleted according to a SnapshotNow probe.
+	 * error.  This is helpful since scanning an information_schema view under
+	 * MVCC rules can result in referencing rels that were just deleted
+	 * according to a SnapshotNow probe.
 	 */
 	if (rel == NULL)
 		return false;
@@ -2382,7 +2378,7 @@ rewriteTargetView(Query *parsetree, Relation view)
 	 * that does not correspond to what happens in ordinary SELECT usage of a
 	 * view: all referenced columns must have read permission, even if
 	 * optimization finds that some of them can be discarded during query
-	 * transformation.  The flattening we're doing here is an optional
+	 * transformation.	The flattening we're doing here is an optional
 	 * optimization, too.  (If you are unpersuaded and want to change this,
 	 * note that applying adjust_view_column_set to view_rte->selectedCols is
 	 * clearly *not* the right answer, since that neglects base-rel columns
@@ -2684,10 +2680,10 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 			parsetree = rewriteTargetView(parsetree, rt_entry_relation);
 
 			/*
-			 * At this point product_queries contains any DO ALSO rule actions.
-			 * Add the rewritten query before or after those.  This must match
-			 * the handling the original query would have gotten below, if
-			 * we allowed it to be included again.
+			 * At this point product_queries contains any DO ALSO rule
+			 * actions. Add the rewritten query before or after those.	This
+			 * must match the handling the original query would have gotten
+			 * below, if we allowed it to be included again.
 			 */
 			if (parsetree->commandType == CMD_INSERT)
 				product_queries = lcons(parsetree, product_queries);
@@ -2705,42 +2701,42 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 			returning = true;
 		}
 
-			/*
-			 * If we got any product queries, recursively rewrite them --- but
-			 * first check for recursion!
-			 */
-			if (product_queries != NIL)
+		/*
+		 * If we got any product queries, recursively rewrite them --- but
+		 * first check for recursion!
+		 */
+		if (product_queries != NIL)
+		{
+			ListCell   *n;
+			rewrite_event *rev;
+
+			foreach(n, rewrite_events)
 			{
-				ListCell   *n;
-				rewrite_event *rev;
-
-				foreach(n, rewrite_events)
-				{
-					rev = (rewrite_event *) lfirst(n);
-					if (rev->relation == RelationGetRelid(rt_entry_relation) &&
-						rev->event == event)
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-								 errmsg("infinite recursion detected in rules for relation \"%s\"",
+				rev = (rewrite_event *) lfirst(n);
+				if (rev->relation == RelationGetRelid(rt_entry_relation) &&
+					rev->event == event)
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+							 errmsg("infinite recursion detected in rules for relation \"%s\"",
 							   RelationGetRelationName(rt_entry_relation))));
-				}
-
-				rev = (rewrite_event *) palloc(sizeof(rewrite_event));
-				rev->relation = RelationGetRelid(rt_entry_relation);
-				rev->event = event;
-				rewrite_events = lcons(rev, rewrite_events);
-
-				foreach(n, product_queries)
-				{
-					Query	   *pt = (Query *) lfirst(n);
-					List	   *newstuff;
-
-					newstuff = RewriteQuery(pt, rewrite_events);
-					rewritten = list_concat(rewritten, newstuff);
-				}
-
-				rewrite_events = list_delete_first(rewrite_events);
 			}
+
+			rev = (rewrite_event *) palloc(sizeof(rewrite_event));
+			rev->relation = RelationGetRelid(rt_entry_relation);
+			rev->event = event;
+			rewrite_events = lcons(rev, rewrite_events);
+
+			foreach(n, product_queries)
+			{
+				Query	   *pt = (Query *) lfirst(n);
+				List	   *newstuff;
+
+				newstuff = RewriteQuery(pt, rewrite_events);
+				rewritten = list_concat(rewritten, newstuff);
+			}
+
+			rewrite_events = list_delete_first(rewrite_events);
+		}
 
 		/*
 		 * If there is an INSTEAD, and the original query has a RETURNING, we

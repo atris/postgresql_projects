@@ -1,7 +1,7 @@
 /*-------------------------------------------------------------------------
  *
  * timestamp.c
- *	  Functions for the built-in SQL92 types "timestamp" and "interval".
+ *	  Functions for the built-in SQL types "timestamp" and "interval".
  *
  * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
@@ -1296,7 +1296,7 @@ GetCurrentTimestamp(void)
 int64
 GetCurrentIntegerTimestamp(void)
 {
-	int64 result;
+	int64		result;
 	struct timeval tp;
 
 	gettimeofday(&tp, NULL);
@@ -2276,9 +2276,9 @@ interval_hash(PG_FUNCTION_ARGS)
 #endif
 }
 
-/* overlaps_timestamp() --- implements the SQL92 OVERLAPS operator.
+/* overlaps_timestamp() --- implements the SQL OVERLAPS operator.
  *
- * Algorithm is per SQL92 spec.  This is much harder than you'd think
+ * Algorithm is per SQL spec.  This is much harder than you'd think
  * because the spec requires us to deliver a non-null answer in some cases
  * where some of the inputs are null.
  */
@@ -3129,7 +3129,7 @@ interval_avg(PG_FUNCTION_ARGS)
 	memcpy((void *) &sumX, DatumGetPointer(transdatums[0]), sizeof(Interval));
 	memcpy((void *) &N, DatumGetPointer(transdatums[1]), sizeof(Interval));
 
-	/* SQL92 defines AVG of no values to be NULL */
+	/* SQL defines AVG of no values to be NULL */
 	if (N.time == 0)
 		PG_RETURN_NULL();
 
@@ -3759,7 +3759,7 @@ interval_trunc(PG_FUNCTION_ARGS)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("interval units \"%s\" not supported "
-									"because months usually have fractional weeks",
+							  "because months usually have fractional weeks",
 										lowunits)));
 					else
 						ereport(ERROR,
@@ -4608,8 +4608,8 @@ timestamp_izone(PG_FUNCTION_ARGS)
 	if (zone->month != 0 || zone->day != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("interval time zone \"%s\" must not include months or days",
-						DatumGetCString(DirectFunctionCall1(interval_out,
+		  errmsg("interval time zone \"%s\" must not include months or days",
+				 DatumGetCString(DirectFunctionCall1(interval_out,
 												  PointerGetDatum(zone))))));
 
 #ifdef HAVE_INT64_TIMESTAMP
@@ -4781,8 +4781,8 @@ timestamptz_izone(PG_FUNCTION_ARGS)
 	if (zone->month != 0 || zone->day != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("interval time zone \"%s\" must not include months or days",
-						DatumGetCString(DirectFunctionCall1(interval_out,
+		  errmsg("interval time zone \"%s\" must not include months or days",
+				 DatumGetCString(DirectFunctionCall1(interval_out,
 												  PointerGetDatum(zone))))));
 
 #ifdef HAVE_INT64_TIMESTAMP

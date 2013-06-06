@@ -198,7 +198,7 @@ static void
 deleteObjectsInList(ObjectAddresses *targetObjects, Relation *depRel,
 					int flags)
 {
-	int		i;
+	int			i;
 
 	/*
 	 * Keep track of objects for event triggers, if necessary.
@@ -210,7 +210,7 @@ deleteObjectsInList(ObjectAddresses *targetObjects, Relation *depRel,
 			ObjectAddress *thisobj = targetObjects->refs + i;
 
 			if ((!(flags & PERFORM_DELETION_INTERNAL)) &&
-				EventTriggerSupportsObjectType(getObjectClass(thisobj)))
+				EventTriggerSupportsObjectClass(getObjectClass(thisobj)))
 			{
 				EventTriggerSQLDropAddObject(thisobj);
 			}

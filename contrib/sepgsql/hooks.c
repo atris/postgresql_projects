@@ -98,7 +98,7 @@ sepgsql_object_access(ObjectAccessType access,
 		case OAT_POST_CREATE:
 			{
 				ObjectAccessPostCreate *pc_arg = arg;
-				bool	is_internal;
+				bool		is_internal;
 
 				is_internal = pc_arg ? pc_arg->is_internal : false;
 
@@ -107,7 +107,7 @@ sepgsql_object_access(ObjectAccessType access,
 					case DatabaseRelationId:
 						Assert(!is_internal);
 						sepgsql_database_post_create(objectId,
-													 sepgsql_context_info.createdb_dtemplate);
+									sepgsql_context_info.createdb_dtemplate);
 						break;
 
 					case NamespaceRelationId:
@@ -190,8 +190,8 @@ sepgsql_object_access(ObjectAccessType access,
 
 		case OAT_POST_ALTER:
 			{
-				ObjectAccessPostAlter  *pa_arg = arg;
-				bool	is_internal = pa_arg->is_internal;
+				ObjectAccessPostAlter *pa_arg = arg;
+				bool		is_internal = pa_arg->is_internal;
 
 				switch (classId)
 				{
@@ -207,21 +207,21 @@ sepgsql_object_access(ObjectAccessType access,
 
 					case RelationRelationId:
 						if (subId == 0)
-                        {
+						{
 							/*
 							 * A case when we don't want to apply permission
 							 * check is that relation is internally altered
-							 * without user's intention. E.g, no need to
-							 * check on toast table/index to be renamed at
-							 * end of the table rewrites.
+							 * without user's intention. E.g, no need to check
+							 * on toast table/index to be renamed at end of
+							 * the table rewrites.
 							 */
 							if (is_internal)
-                                break;
+								break;
 
 							sepgsql_relation_setattr(objectId);
-                        }
-                        else
-                            sepgsql_attribute_setattr(objectId, subId);
+						}
+						else
+							sepgsql_attribute_setattr(objectId, subId);
 						break;
 
 					case ProcedureRelationId:
@@ -233,6 +233,32 @@ sepgsql_object_access(ObjectAccessType access,
 						/* Ignore unsupported object classes */
 						break;
 				}
+			}
+			break;
+
+		case OAT_NAMESPACE_SEARCH:
+			{
+				ObjectAccessNamespaceSearch *ns_arg = arg;
+
+				/*
+				 * If stacked extension already decided not to allow users to
+				 * search this schema, we just stick with that decision.
+				 */
+				if (!ns_arg->result)
+					break;
+
+				Assert(classId == NamespaceRelationId);
+				Assert(ns_arg->result);
+				ns_arg->result
+					= sepgsql_schema_search(objectId,
+											ns_arg->ereport_on_violation);
+			}
+			break;
+
+		case OAT_FUNCTION_EXECUTE:
+			{
+				Assert(classId == ProcedureRelationId);
+				sepgsql_proc_execute(objectId);
 			}
 			break;
 
@@ -273,10 +299,10 @@ sepgsql_exec_check_perms(List *rangeTabls, bool abort)
 static void
 sepgsql_utility_command(Node *parsetree,
 						const char *queryString,
+						ProcessUtilityContext context,
 						ParamListInfo params,
 						DestReceiver *dest,
-						char *completionTag,
-						ProcessUtilityContext context)
+						char *completionTag)
 {
 	sepgsql_context_info_t saved_context_info = sepgsql_context_info;
 	ListCell   *cell;
@@ -336,11 +362,13 @@ sepgsql_utility_command(Node *parsetree,
 		}
 
 		if (next_ProcessUtility_hook)
-			(*next_ProcessUtility_hook) (parsetree, queryString, params,
-										 dest, completionTag, context);
+			(*next_ProcessUtility_hook) (parsetree, queryString,
+										 context, params,
+										 dest, completionTag);
 		else
-			standard_ProcessUtility(parsetree, queryString, params,
-									dest, completionTag, context);
+			standard_ProcessUtility(parsetree, queryString,
+									context, params,
+									dest, completionTag);
 	}
 	PG_CATCH();
 	{

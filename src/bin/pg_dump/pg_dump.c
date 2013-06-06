@@ -675,9 +675,9 @@ main(int argc, char **argv)
 	if (numWorkers > 1 && fout->remoteVersion < 90200
 		&& !no_synchronized_snapshots)
 		exit_horribly(NULL,
-			  "No synchronized snapshots available in this server version.\n"
-			   "Run with --no-synchronized-snapshots instead if you do not\n"
-					  "need synchronized snapshots.\n");
+		 "Synchronized snapshots are not supported by this server version.\n"
+		  "Run with --no-synchronized-snapshots instead if you do not need\n"
+					  "synchronized snapshots.\n");
 
 	/* Find the last built-in OID, if needed */
 	if (fout->remoteVersion < 70300)
@@ -891,7 +891,7 @@ help(const char *progname)
 	printf(_("  --exclude-table-data=TABLE   do NOT dump data for the named table(s)\n"));
 	printf(_("  --inserts                    dump data as INSERT commands, rather than COPY\n"));
 	printf(_("  --no-security-labels         do not dump security label assignments\n"));
-	printf(_("  --no-synchronized-snapshots parallel processes should not use synchronized snapshots\n"));
+	printf(_("  --no-synchronized-snapshots  do not use synchronized snapshots in parallel jobs\n"));
 	printf(_("  --no-tablespaces             do not dump tablespace assignments\n"));
 	printf(_("  --no-unlogged-table-data     do not dump unlogged table data\n"));
 	printf(_("  --quote-all-identifiers      quote all identifiers, even if not key words\n"));
@@ -1034,6 +1034,7 @@ setup_connection(Archive *AH, const char *dumpencoding, char *use_role)
 
 			appendPQExpBuffer(query, "SET TRANSACTION SNAPSHOT ");
 			appendStringLiteralConn(query, AH->sync_snapshot_id, conn);
+			ExecuteSqlStatement(AH, query->data);
 			destroyPQExpBuffer(query);
 		}
 		else
@@ -1758,8 +1759,8 @@ refreshMatViewData(Archive *fout, TableDataInfo *tdinfo)
 	TableInfo  *tbinfo = tdinfo->tdtable;
 	PQExpBuffer q;
 
-	/* If the materialized view is not flagged as scannable, skip this. */
-	if (!tbinfo->isscannable)
+	/* If the materialized view is not flagged as populated, skip this. */
+	if (!tbinfo->relispopulated)
 		return;
 
 	q = createPQExpBuffer();
@@ -1966,8 +1967,8 @@ buildMatViewRefreshDependencies(Archive *fout)
 
 		addObjectDependency(dobj, refdobj->dumpId);
 
-		if (!reftbinfo->isscannable)
-			tbinfo->isscannable = false;
+		if (!reftbinfo->relispopulated)
+			tbinfo->relispopulated = false;
 	}
 
 	PQclear(res);
@@ -4218,7 +4219,7 @@ getTables(Archive *fout, int *numTables)
 	int			i_toastoid;
 	int			i_toastfrozenxid;
 	int			i_relpersistence;
-	int			i_isscannable;
+	int			i_relispopulated;
 	int			i_owning_tab;
 	int			i_owning_col;
 	int			i_reltablespace;
@@ -4264,7 +4265,7 @@ getTables(Archive *fout, int *numTables)
 						  "c.relhasindex, c.relhasrules, c.relhasoids, "
 						  "c.relfrozenxid, tc.oid AS toid, "
 						  "tc.relfrozenxid AS tfrozenxid, "
-		 "c.relpersistence, pg_relation_is_scannable(c.oid) as isscannable, "
+						  "c.relpersistence, c.relispopulated, "
 						  "c.relpages, "
 						  "CASE WHEN c.reloftype <> 0 THEN c.reloftype::pg_catalog.regtype ELSE NULL END AS reloftype, "
 						  "d.refobjid AS owning_tab, "
@@ -4301,7 +4302,7 @@ getTables(Archive *fout, int *numTables)
 						  "c.relhasindex, c.relhasrules, c.relhasoids, "
 						  "c.relfrozenxid, tc.oid AS toid, "
 						  "tc.relfrozenxid AS tfrozenxid, "
-						  "c.relpersistence, 't'::bool as isscannable, "
+						  "c.relpersistence, 't' as relispopulated, "
 						  "c.relpages, "
 						  "CASE WHEN c.reloftype <> 0 THEN c.reloftype::pg_catalog.regtype ELSE NULL END AS reloftype, "
 						  "d.refobjid AS owning_tab, "
@@ -4338,7 +4339,7 @@ getTables(Archive *fout, int *numTables)
 						  "c.relhasindex, c.relhasrules, c.relhasoids, "
 						  "c.relfrozenxid, tc.oid AS toid, "
 						  "tc.relfrozenxid AS tfrozenxid, "
-						  "'p' AS relpersistence, 't'::bool as isscannable, "
+						  "'p' AS relpersistence, 't' as relispopulated, "
 						  "c.relpages, "
 						  "CASE WHEN c.reloftype <> 0 THEN c.reloftype::pg_catalog.regtype ELSE NULL END AS reloftype, "
 						  "d.refobjid AS owning_tab, "
@@ -4374,7 +4375,7 @@ getTables(Archive *fout, int *numTables)
 						  "c.relhasindex, c.relhasrules, c.relhasoids, "
 						  "c.relfrozenxid, tc.oid AS toid, "
 						  "tc.relfrozenxid AS tfrozenxid, "
-						  "'p' AS relpersistence, 't'::bool as isscannable, "
+						  "'p' AS relpersistence, 't' as relispopulated, "
 						  "c.relpages, "
 						  "NULL AS reloftype, "
 						  "d.refobjid AS owning_tab, "
@@ -4410,7 +4411,7 @@ getTables(Archive *fout, int *numTables)
 						  "c.relhasindex, c.relhasrules, c.relhasoids, "
 						  "c.relfrozenxid, tc.oid AS toid, "
 						  "tc.relfrozenxid AS tfrozenxid, "
-						  "'p' AS relpersistence, 't'::bool as isscannable, "
+						  "'p' AS relpersistence, 't' as relispopulated, "
 						  "c.relpages, "
 						  "NULL AS reloftype, "
 						  "d.refobjid AS owning_tab, "
@@ -4447,7 +4448,7 @@ getTables(Archive *fout, int *numTables)
 						  "0 AS relfrozenxid, "
 						  "0 AS toid, "
 						  "0 AS tfrozenxid, "
-						  "'p' AS relpersistence, 't'::bool as isscannable, "
+						  "'p' AS relpersistence, 't' as relispopulated, "
 						  "relpages, "
 						  "NULL AS reloftype, "
 						  "d.refobjid AS owning_tab, "
@@ -4483,7 +4484,7 @@ getTables(Archive *fout, int *numTables)
 						  "0 AS relfrozenxid, "
 						  "0 AS toid, "
 						  "0 AS tfrozenxid, "
-						  "'p' AS relpersistence, 't'::bool as isscannable, "
+						  "'p' AS relpersistence, 't' as relispopulated, "
 						  "relpages, "
 						  "NULL AS reloftype, "
 						  "d.refobjid AS owning_tab, "
@@ -4515,7 +4516,7 @@ getTables(Archive *fout, int *numTables)
 						  "0 AS relfrozenxid, "
 						  "0 AS toid, "
 						  "0 AS tfrozenxid, "
-						  "'p' AS relpersistence, 't'::bool as isscannable, "
+						  "'p' AS relpersistence, 't' as relispopulated, "
 						  "relpages, "
 						  "NULL AS reloftype, "
 						  "NULL::oid AS owning_tab, "
@@ -4542,7 +4543,7 @@ getTables(Archive *fout, int *numTables)
 						  "0 AS relfrozenxid, "
 						  "0 AS toid, "
 						  "0 AS tfrozenxid, "
-						  "'p' AS relpersistence, 't'::bool as isscannable, "
+						  "'p' AS relpersistence, 't' as relispopulated, "
 						  "relpages, "
 						  "NULL AS reloftype, "
 						  "NULL::oid AS owning_tab, "
@@ -4579,7 +4580,7 @@ getTables(Archive *fout, int *numTables)
 						  "0 as relfrozenxid, "
 						  "0 AS toid, "
 						  "0 AS tfrozenxid, "
-						  "'p' AS relpersistence, 't'::bool as isscannable, "
+						  "'p' AS relpersistence, 't' as relispopulated, "
 						  "0 AS relpages, "
 						  "NULL AS reloftype, "
 						  "NULL::oid AS owning_tab, "
@@ -4628,7 +4629,7 @@ getTables(Archive *fout, int *numTables)
 	i_toastoid = PQfnumber(res, "toid");
 	i_toastfrozenxid = PQfnumber(res, "tfrozenxid");
 	i_relpersistence = PQfnumber(res, "relpersistence");
-	i_isscannable = PQfnumber(res, "isscannable");
+	i_relispopulated = PQfnumber(res, "relispopulated");
 	i_relpages = PQfnumber(res, "relpages");
 	i_owning_tab = PQfnumber(res, "owning_tab");
 	i_owning_col = PQfnumber(res, "owning_col");
@@ -4671,7 +4672,7 @@ getTables(Archive *fout, int *numTables)
 		tblinfo[i].hasrules = (strcmp(PQgetvalue(res, i, i_relhasrules), "t") == 0);
 		tblinfo[i].hastriggers = (strcmp(PQgetvalue(res, i, i_relhastriggers), "t") == 0);
 		tblinfo[i].hasoids = (strcmp(PQgetvalue(res, i, i_relhasoids), "t") == 0);
-		tblinfo[i].isscannable = (strcmp(PQgetvalue(res, i, i_isscannable), "t") == 0);
+		tblinfo[i].relispopulated = (strcmp(PQgetvalue(res, i, i_relispopulated), "t") == 0);
 		tblinfo[i].relpages = atoi(PQgetvalue(res, i, i_relpages));
 		tblinfo[i].frozenxid = atooid(PQgetvalue(res, i, i_relfrozenxid));
 		tblinfo[i].toast_oid = atooid(PQgetvalue(res, i, i_toastoid));
@@ -13097,7 +13098,8 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 			appendPQExpBuffer(q, "\nOPTIONS (\n    %s\n)", ftoptions);
 
 		/*
-		 * For materialized views, create the AS clause just like a view.
+		 * For materialized views, create the AS clause just like a view. At
+		 * this point, we always mark the view as not populated.
 		 */
 		if (tbinfo->relkind == RELKIND_MATVIEW)
 		{
@@ -13224,6 +13226,23 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 								  "WHERE oid = '%u';\n",
 								  tbinfo->toast_frozenxid, tbinfo->toast_oid);
 			}
+		}
+
+		/*
+		 * In binary_upgrade mode, restore matviews' populated status by
+		 * poking pg_class directly.  This is pretty ugly, but we can't use
+		 * REFRESH MATERIALIZED VIEW since it's possible that some underlying
+		 * matview is not populated even though this matview is.
+		 */
+		if (binary_upgrade && tbinfo->relkind == RELKIND_MATVIEW &&
+			tbinfo->relispopulated)
+		{
+			appendPQExpBuffer(q, "\n-- For binary upgrade, mark materialized view as populated\n");
+			appendPQExpBuffer(q, "UPDATE pg_catalog.pg_class\n"
+							  "SET relispopulated = 't'\n"
+							  "WHERE oid = ");
+			appendStringLiteralAH(q, fmtId(tbinfo->dobj.name), fout);
+			appendPQExpBuffer(q, "::pg_catalog.regclass;\n");
 		}
 
 		/*
@@ -14619,10 +14638,6 @@ getExtensionMembership(Archive *fout, ExtensionInfo extinfo[],
 		int			nconfigitems;
 		int			nconditionitems;
 
-		/* Tables of not-to-be-dumped extensions shouldn't be dumped */
-		if (!curext->dobj.dump)
-			continue;
-
 		if (parsePGArray(extconfig, &extconfigarray, &nconfigitems) &&
 		  parsePGArray(extcondition, &extconditionarray, &nconditionitems) &&
 			nconfigitems == nconditionitems)
@@ -14632,21 +14647,54 @@ getExtensionMembership(Archive *fout, ExtensionInfo extinfo[],
 			for (j = 0; j < nconfigitems; j++)
 			{
 				TableInfo  *configtbl;
+				Oid			configtbloid = atooid(extconfigarray[j]);
+				bool		dumpobj = curext->dobj.dump;
 
-				configtbl = findTableByOid(atooid(extconfigarray[j]));
+				configtbl = findTableByOid(configtbloid);
 				if (configtbl == NULL)
 					continue;
 
 				/*
-				 * Note: config tables are dumped without OIDs regardless of
-				 * the --oids setting.	This is because row filtering
-				 * conditions aren't compatible with dumping OIDs.
+				 * Tables of not-to-be-dumped extensions shouldn't be dumped
+				 * unless the table or its schema is explicitly included
 				 */
-				makeTableDataInfo(configtbl, false);
-				if (configtbl->dataObj != NULL)
+				if (!curext->dobj.dump)
 				{
-					if (strlen(extconditionarray[j]) > 0)
-						configtbl->dataObj->filtercond = pg_strdup(extconditionarray[j]);
+					/* check table explicitly requested */
+					if (table_include_oids.head != NULL &&
+						simple_oid_list_member(&table_include_oids,
+											   configtbloid))
+						dumpobj = true;
+
+					/* check table's schema explicitly requested */
+					if (configtbl->dobj.namespace->dobj.dump)
+						dumpobj = true;
+				}
+
+				/* check table excluded by an exclusion switch */
+				if (table_exclude_oids.head != NULL &&
+					simple_oid_list_member(&table_exclude_oids,
+										   configtbloid))
+					dumpobj = false;
+
+				/* check schema excluded by an exclusion switch */
+				if (simple_oid_list_member(&schema_exclude_oids,
+								  configtbl->dobj.namespace->dobj.catId.oid))
+					dumpobj = false;
+
+				if (dumpobj)
+				{
+					/*
+					 * Note: config tables are dumped without OIDs regardless
+					 * of the --oids setting.  This is because row filtering
+					 * conditions aren't compatible with dumping OIDs.
+					 */
+					makeTableDataInfo(configtbl, false);
+					if (configtbl->dataObj != NULL)
+					{
+						if (strlen(extconditionarray[j]) > 0)
+							configtbl->dataObj->filtercond = pg_strdup(extconditionarray[j]);
+					}
 				}
 			}
 		}

@@ -85,7 +85,6 @@ static char *ExecBuildSlotValueDescription(TupleTableSlot *slot,
 							  int maxfieldlen);
 static void EvalPlanQualStart(EPQState *epqstate, EState *parentestate,
 				  Plan *planTree);
-static bool RelationIdIsScannable(Oid relid);
 
 /* end of local decls */
 
@@ -495,65 +494,6 @@ ExecutorRewind(QueryDesc *queryDesc)
 
 
 /*
- * ExecCheckRelationsScannable
- *		Check that relations which are to be accessed are in a scannable
- *		state.
- *
- * If not, throw error. For a materialized view, suggest refresh.
- */
-static void
-ExecCheckRelationsScannable(List *rangeTable)
-{
-	ListCell   *l;
-
-	foreach(l, rangeTable)
-	{
-		RangeTblEntry *rte = (RangeTblEntry *) lfirst(l);
-
-		if (rte->rtekind != RTE_RELATION)
-			continue;
-
-		if (!RelationIdIsScannable(rte->relid))
-		{
-			if (rte->relkind == RELKIND_MATVIEW)
-			{
-				/* It is OK to replace the contents of an invalid matview. */
-				if (rte->isResultRel)
-					continue;
-
-				ereport(ERROR,
-						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-						 errmsg("materialized view \"%s\" has not been populated",
-								get_rel_name(rte->relid)),
-						 errhint("Use the REFRESH MATERIALIZED VIEW command.")));
-			}
-			else
-				/* This should never happen, so elog will do. */
-				elog(ERROR, "relation \"%s\" is not flagged as scannable",
-					 get_rel_name(rte->relid));
-		}
-	}
-}
-
-/*
- * Tells whether a relation is scannable.
- *
- * Currently only non-populated materialzed views are not.
- */
-static bool
-RelationIdIsScannable(Oid relid)
-{
-	Relation	relation;
-	bool		result;
-
-	relation = RelationIdGetRelation(relid);
-	result = relation->rd_isscannable;
-	RelationClose(relation);
-
-	return result;
-}
-
-/*
  * ExecCheckRTPerms
  *		Check access permissions for all relations listed in a range table.
  *
@@ -944,13 +884,6 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	planstate = ExecInitNode(plan, estate, eflags);
 
 	/*
-	 * Unless we are creating a view or are creating a materialized view WITH
-	 * NO DATA, ensure that all referenced relations are scannable.
-	 */
-	if ((eflags & EXEC_FLAG_WITH_NO_DATA) == 0)
-		ExecCheckRelationsScannable(rangeTable);
-
-	/*
 	 * Get the tuple descriptor describing the type of tuples to return.
 	 */
 	tupType = ExecGetResultType(planstate);
@@ -1026,12 +959,13 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 							RelationGetRelationName(resultRel))));
 			break;
 		case RELKIND_VIEW:
+
 			/*
 			 * Okay only if there's a suitable INSTEAD OF trigger.  Messages
 			 * here should match rewriteHandler.c's rewriteTargetView, except
 			 * that we omit errdetail because we haven't got the information
-			 * handy (and given that we really shouldn't get here anyway,
-			 * it's not worth great exertion to get).
+			 * handy (and given that we really shouldn't get here anyway, it's
+			 * not worth great exertion to get).
 			 */
 			switch (operation)
 			{
@@ -1079,8 +1013,8 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 					if (fdwroutine->ExecForeignInsert == NULL)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("cannot insert into foreign table \"%s\"",
-										RelationGetRelationName(resultRel))));
+							errmsg("cannot insert into foreign table \"%s\"",
+								   RelationGetRelationName(resultRel))));
 					break;
 				case CMD_UPDATE:
 					if (fdwroutine->ExecForeignUpdate == NULL)
@@ -1093,8 +1027,8 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 					if (fdwroutine->ExecForeignDelete == NULL)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("cannot delete from foreign table \"%s\"",
-										RelationGetRelationName(resultRel))));
+							errmsg("cannot delete from foreign table \"%s\"",
+								   RelationGetRelationName(resultRel))));
 					break;
 				default:
 					elog(ERROR, "unrecognized CmdType: %d", (int) operation);
@@ -1458,7 +1392,8 @@ ExecEndPlan(PlanState *planstate, EState *estate)
 	}
 
 	/*
-	 * close any relations selected FOR [KEY] UPDATE/SHARE, again keeping locks
+	 * close any relations selected FOR [KEY] UPDATE/SHARE, again keeping
+	 * locks
 	 */
 	foreach(l, estate->es_rowMarks)
 	{
@@ -1613,9 +1548,9 @@ ExecRelCheck(ResultRelInfo *resultRelInfo,
 		qual = resultRelInfo->ri_ConstraintExprs[i];
 
 		/*
-		 * NOTE: SQL92 specifies that a NULL result from a constraint
-		 * expression is not to be treated as a failure.  Therefore, tell
-		 * ExecQual to return TRUE for NULL.
+		 * NOTE: SQL specifies that a NULL result from a constraint expression
+		 * is not to be treated as a failure.  Therefore, tell ExecQual to
+		 * return TRUE for NULL.
 		 */
 		if (!ExecQual(qual, econtext, true))
 			return check[i].ccname;
@@ -1968,13 +1903,13 @@ EvalPlanQualFetch(EState *estate, Relation relation, int lockmode,
 			/*
 			 * If tuple was inserted by our own transaction, we have to check
 			 * cmin against es_output_cid: cmin >= current CID means our
-			 * command cannot see the tuple, so we should ignore it.
-			 * Otherwise heap_lock_tuple() will throw an error, and so would
-			 * any later attempt to update or delete the tuple.  (We need not
-			 * check cmax because HeapTupleSatisfiesDirty will consider a
-			 * tuple deleted by our transaction dead, regardless of cmax.)
-			 * Wee just checked that priorXmax == xmin, so we can test that
-			 * variable instead of doing HeapTupleHeaderGetXmin again.
+			 * command cannot see the tuple, so we should ignore it. Otherwise
+			 * heap_lock_tuple() will throw an error, and so would any later
+			 * attempt to update or delete the tuple.  (We need not check cmax
+			 * because HeapTupleSatisfiesDirty will consider a tuple deleted
+			 * by our transaction dead, regardless of cmax.) Wee just checked
+			 * that priorXmax == xmin, so we can test that variable instead of
+			 * doing HeapTupleHeaderGetXmin again.
 			 */
 			if (TransactionIdIsCurrentTransactionId(priorXmax) &&
 				HeapTupleHeaderGetCmin(tuple.t_data) >= estate->es_output_cid)
@@ -1988,7 +1923,7 @@ EvalPlanQualFetch(EState *estate, Relation relation, int lockmode,
 			 */
 			test = heap_lock_tuple(relation, &tuple,
 								   estate->es_output_cid,
-								   lockmode, false /* wait */,
+								   lockmode, false /* wait */ ,
 								   false, &buffer, &hufd);
 			/* We now have two pins on the buffer, get rid of one */
 			ReleaseBuffer(buffer);
@@ -1996,6 +1931,7 @@ EvalPlanQualFetch(EState *estate, Relation relation, int lockmode,
 			switch (test)
 			{
 				case HeapTupleSelfUpdated:
+
 					/*
 					 * The target tuple was already updated or deleted by the
 					 * current command, or by a later command in the current

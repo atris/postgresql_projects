@@ -354,7 +354,7 @@ PlanForeignModify (PlannerInfo *root,
      <literal>resultRelation</> identifies the target foreign table by its
      rangetable index.  <literal>subplan_index</> identifies which target of
      the <structname>ModifyTable</> plan node this is, counting from zero;
-     use this if you want to index into <literal>node-&gt;plans</> or other
+     use this if you want to index into <literal>plan-&gt;plans</> or other
      substructure of the <literal>plan</> node.
     </para>
 
@@ -450,7 +450,7 @@ ExecForeignInsert (EState *estate,
      query has a <literal>RETURNING</> clause.  Hence, the FDW could choose
      to optimize away returning some or all columns depending on the contents
      of the <literal>RETURNING</> clause.  However, some slot must be
-     returned to indicate success, or the query's reported rowcount will be
+     returned to indicate success, or the query's reported row count will be
      wrong.
     </para>
 
@@ -495,7 +495,7 @@ ExecForeignUpdate (EState *estate,
      query has a <literal>RETURNING</> clause.  Hence, the FDW could choose
      to optimize away returning some or all columns depending on the contents
      of the <literal>RETURNING</> clause.  However, some slot must be
-     returned to indicate success, or the query's reported rowcount will be
+     returned to indicate success, or the query's reported row count will be
      wrong.
     </para>
 
@@ -538,7 +538,7 @@ ExecForeignDelete (EState *estate,
      query has a <literal>RETURNING</> clause.  Hence, the FDW could choose
      to optimize away returning some or all columns depending on the contents
      of the <literal>RETURNING</> clause.  However, some slot must be
-     returned to indicate success, or the query's reported rowcount will be
+     returned to indicate success, or the query's reported row count will be
      wrong.
     </para>
 

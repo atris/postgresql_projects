@@ -183,7 +183,7 @@ static Backend *ShmemBackendArray;
  * List of background workers.
  *
  * A worker that requests a database connection during registration will have
- * rw_backend set, and will be present in BackendList.  Note: do not rely on
+ * rw_backend set, and will be present in BackendList.	Note: do not rely on
  * rw_backend being non-NULL for shmem-connected workers!
  */
 typedef struct RegisteredBgWorker
@@ -197,7 +197,7 @@ typedef struct RegisteredBgWorker
 	int			rw_cookie;
 #endif
 	slist_node	rw_lnode;		/* list link */
-}	RegisteredBgWorker;
+} RegisteredBgWorker;
 
 static slist_head BackgroundWorkerList = SLIST_STATIC_INIT(BackgroundWorkerList);
 
@@ -207,8 +207,10 @@ BackgroundWorker *MyBgworkerEntry = NULL;
 
 /* The socket number we are listening for connections on */
 int			PostPortNumber;
+
 /* The directory names for Unix socket(s) */
 char	   *Unix_socket_directories;
+
 /* The TCP listen address(es) */
 char	   *ListenAddresses;
 
@@ -446,7 +448,7 @@ typedef struct
 	HANDLE		procHandle;
 	DWORD		procId;
 } win32_deadchild_waitinfo;
-#endif /* WIN32 */
+#endif   /* WIN32 */
 
 static pid_t backend_forkexec(Port *port);
 static pid_t internal_forkexec(int argc, char *argv[], Port *port);
@@ -1022,7 +1024,7 @@ PostmasterMain(int argc, char *argv[])
 			/* syntax error in list */
 			ereport(FATAL,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid list syntax for \"unix_socket_directories\"")));
+			 errmsg("invalid list syntax for \"unix_socket_directories\"")));
 		}
 
 		foreach(l, elemlist)
@@ -1212,8 +1214,8 @@ PostmasterMain(int argc, char *argv[])
 		/*
 		 * We can start up without the IDENT file, although it means that you
 		 * cannot log in using any of the authentication methods that need a
-		 * user name mapping. load_ident() already logged the details of
-		 * error to the log.
+		 * user name mapping. load_ident() already logged the details of error
+		 * to the log.
 		 */
 	}
 
@@ -1414,7 +1416,7 @@ checkDataDir(void)
  * we don't actually sleep so that they are quickly serviced.
  */
 static void
-DetermineSleepTime(struct timeval *timeout)
+DetermineSleepTime(struct timeval * timeout)
 {
 	TimestampTz next_wakeup = 0;
 
@@ -2280,6 +2282,7 @@ SIGHUP_handler(SIGNAL_ARGS)
 				(errmsg("received SIGHUP, reloading configuration files")));
 		ProcessConfigFile(PGC_SIGHUP);
 		SignalChildren(SIGHUP);
+		SignalUnconnectedWorkers(SIGHUP);
 		if (StartupPID != 0)
 			signal_child(StartupPID, SIGHUP);
 		if (BgWriterPID != 0)
@@ -2968,7 +2971,7 @@ HandleChildCrash(int pid, int exitstatus, const char *procname)
 
 		rw = slist_container(RegisteredBgWorker, rw_lnode, siter.cur);
 		if (rw->rw_pid == 0)
-			continue;		/* not running */
+			continue;			/* not running */
 		if (rw->rw_pid == pid)
 		{
 			/*
@@ -3818,9 +3821,9 @@ BackendInitialize(Port *port)
 	remote_host[0] = '\0';
 	remote_port[0] = '\0';
 	if ((ret = pg_getnameinfo_all(&port->raddr.addr, port->raddr.salen,
-						   remote_host, sizeof(remote_host),
-						   remote_port, sizeof(remote_port),
-				  (log_hostname ? 0 : NI_NUMERICHOST) | NI_NUMERICSERV)) != 0)
+								  remote_host, sizeof(remote_host),
+								  remote_port, sizeof(remote_port),
+				 (log_hostname ? 0 : NI_NUMERICHOST) | NI_NUMERICSERV)) != 0)
 		ereport(WARNING,
 				(errmsg_internal("pg_getnameinfo_all() failed: %s",
 								 gai_strerror(ret))));
@@ -3943,7 +3946,7 @@ BackendRun(Port *port)
 	 * from ExtraOptions is (strlen(ExtraOptions) + 1) / 2; see
 	 * pg_split_opts().
 	 */
-	maxac = 5;					/* for fixed args supplied below */
+	maxac = 2;					/* for fixed args supplied below */
 	maxac += (strlen(ExtraOptions) + 1) / 2;
 
 	av = (char **) MemoryContextAlloc(TopMemoryContext,
@@ -3958,11 +3961,6 @@ BackendRun(Port *port)
 	 * ExtraOptions now, since we're safely inside a subprocess.)
 	 */
 	pg_split_opts(av, &ac, ExtraOptions);
-
-	/*
-	 * Tell the backend which database to use.
-	 */
-	av[ac++] = port->database_name;
 
 	av[ac] = NULL;
 
@@ -3986,7 +3984,7 @@ BackendRun(Port *port)
 	 */
 	MemoryContextSwitchTo(TopMemoryContext);
 
-	PostgresMain(ac, av, port->user_name);
+	PostgresMain(ac, av, port->database_name, port->user_name);
 }
 
 
@@ -4507,7 +4505,7 @@ SubPostmasterMain(int argc, char *argv[])
 		/* Attach process to shared data structures */
 		CreateSharedMemoryAndSemaphores(false, 0);
 
-		AuxiliaryProcessMain(argc - 2, argv + 2); /* does not return */
+		AuxiliaryProcessMain(argc - 2, argv + 2);		/* does not return */
 	}
 	if (strcmp(argv[1], "--forkavlauncher") == 0)
 	{
@@ -4523,7 +4521,7 @@ SubPostmasterMain(int argc, char *argv[])
 		/* Attach process to shared data structures */
 		CreateSharedMemoryAndSemaphores(false, 0);
 
-		AutoVacLauncherMain(argc - 2, argv + 2); /* does not return */
+		AutoVacLauncherMain(argc - 2, argv + 2);		/* does not return */
 	}
 	if (strcmp(argv[1], "--forkavworker") == 0)
 	{
@@ -4539,7 +4537,7 @@ SubPostmasterMain(int argc, char *argv[])
 		/* Attach process to shared data structures */
 		CreateSharedMemoryAndSemaphores(false, 0);
 
-		AutoVacWorkerMain(argc - 2, argv + 2); /* does not return */
+		AutoVacWorkerMain(argc - 2, argv + 2);	/* does not return */
 	}
 	if (strncmp(argv[1], "--forkbgworker=", 15) == 0)
 	{
@@ -4568,7 +4566,7 @@ SubPostmasterMain(int argc, char *argv[])
 
 		/* Do not want to attach to shared memory */
 
-		PgArchiverMain(argc, argv); /* does not return */
+		PgArchiverMain(argc, argv);		/* does not return */
 	}
 	if (strcmp(argv[1], "--forkcol") == 0)
 	{
@@ -4577,7 +4575,7 @@ SubPostmasterMain(int argc, char *argv[])
 
 		/* Do not want to attach to shared memory */
 
-		PgstatCollectorMain(argc, argv); /* does not return */
+		PgstatCollectorMain(argc, argv);		/* does not return */
 	}
 	if (strcmp(argv[1], "--forklog") == 0)
 	{
@@ -4586,7 +4584,7 @@ SubPostmasterMain(int argc, char *argv[])
 
 		/* Do not want to attach to shared memory */
 
-		SysLoggerMain(argc, argv); /* does not return */
+		SysLoggerMain(argc, argv);		/* does not return */
 	}
 
 	abort();					/* shouldn't get here */
@@ -5218,11 +5216,11 @@ RegisterBackgroundWorker(BackgroundWorker *worker)
 	}
 
 	/*
-	 * Enforce maximum number of workers.  Note this is overly restrictive:
-	 * we could allow more non-shmem-connected workers, because these don't
-	 * count towards the MAX_BACKENDS limit elsewhere.  This doesn't really
-	 * matter for practical purposes; several million processes would need to
-	 * run on a single server.
+	 * Enforce maximum number of workers.  Note this is overly restrictive: we
+	 * could allow more non-shmem-connected workers, because these don't count
+	 * towards the MAX_BACKENDS limit elsewhere.  This doesn't really matter
+	 * for practical purposes; several million processes would need to run on
+	 * a single server.
 	 */
 	if (++numworkers > maxworkers)
 	{
@@ -5358,6 +5356,22 @@ bgworker_die(SIGNAL_ARGS)
 					MyBgworkerEntry->bgw_name)));
 }
 
+/*
+ * Standard SIGUSR1 handler for unconnected workers
+ *
+ * Here, we want to make sure an unconnected worker will at least heed
+ * latch activity.
+ */
+static void
+bgworker_sigusr1_handler(SIGNAL_ARGS)
+{
+	int			save_errno = errno;
+
+	latch_sigusr1_handler();
+
+	errno = save_errno;
+}
+
 static void
 do_start_bgworker(void)
 {
@@ -5414,7 +5428,7 @@ do_start_bgworker(void)
 	else
 	{
 		pqsignal(SIGINT, SIG_IGN);
-		pqsignal(SIGUSR1, SIG_IGN);
+		pqsignal(SIGUSR1, bgworker_sigusr1_handler);
 		pqsignal(SIGFPE, SIG_IGN);
 	}
 
@@ -6144,7 +6158,7 @@ ShmemBackendArrayRemove(Backend *bn)
 #ifdef WIN32
 
 /*
- * Subset implementation of waitpid() for Windows.  We assume pid is -1
+ * Subset implementation of waitpid() for Windows.	We assume pid is -1
  * (that is, check all child processes) and options is WNOHANG (don't wait).
  */
 static pid_t
@@ -6249,7 +6263,7 @@ InitPostmasterDeathWatchHandle(void)
 	if (fcntl(postmaster_alive_fds[POSTMASTER_FD_WATCH], F_SETFL, O_NONBLOCK))
 		ereport(FATAL,
 				(errcode_for_socket_access(),
-				 errmsg_internal("could not set postmaster death monitoring pipe to non-blocking mode: %m")));
+				 errmsg_internal("could not set postmaster death monitoring pipe to nonblocking mode: %m")));
 #else
 
 	/*

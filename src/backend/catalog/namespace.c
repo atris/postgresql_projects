@@ -22,6 +22,7 @@
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/dependency.h"
+#include "catalog/objectaccess.h"
 #include "catalog/pg_authid.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_conversion.h"
@@ -292,9 +293,10 @@ RangeVarGetRelidExtended(const RangeVar *relation, LOCKMODE lockmode,
 					Oid			namespaceId;
 
 					namespaceId = LookupExplicitNamespace(relation->schemaname, missing_ok);
+
 					/*
-					 *	For missing_ok, allow a non-existant schema name to
-					 *	return InvalidOid.
+					 * For missing_ok, allow a non-existant schema name to
+					 * return InvalidOid.
 					 */
 					if (namespaceId != myTempNamespace)
 						ereport(ERROR,
@@ -2655,7 +2657,10 @@ LookupNamespaceNoError(const char *nspname)
 	if (strcmp(nspname, "pg_temp") == 0)
 	{
 		if (OidIsValid(myTempNamespace))
+		{
+			InvokeNamespaceSearchHook(myTempNamespace, true);
 			return myTempNamespace;
+		}
 
 		/*
 		 * Since this is used only for looking up existing objects, there is
@@ -2697,11 +2702,13 @@ LookupExplicitNamespace(const char *nspname, bool missing_ok)
 	namespaceId = get_namespace_oid(nspname, missing_ok);
 	if (missing_ok && !OidIsValid(namespaceId))
 		return InvalidOid;
-	
+
 	aclresult = pg_namespace_aclcheck(namespaceId, GetUserId(), ACL_USAGE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, ACL_KIND_NAMESPACE,
 					   nspname);
+	/* Schema search hook for this lookup */
+	InvokeNamespaceSearchHook(namespaceId, true);
 
 	return namespaceId;
 }
@@ -3468,7 +3475,8 @@ recomputeNamespacePath(void)
 				if (OidIsValid(namespaceId) &&
 					!list_member_oid(oidlist, namespaceId) &&
 					pg_namespace_aclcheck(namespaceId, roleid,
-										  ACL_USAGE) == ACLCHECK_OK)
+										  ACL_USAGE) == ACLCHECK_OK &&
+					InvokeNamespaceSearchHook(namespaceId, false))
 					oidlist = lappend_oid(oidlist, namespaceId);
 			}
 		}
@@ -3477,7 +3485,8 @@ recomputeNamespacePath(void)
 			/* pg_temp --- substitute temp namespace, if any */
 			if (OidIsValid(myTempNamespace))
 			{
-				if (!list_member_oid(oidlist, myTempNamespace))
+				if (!list_member_oid(oidlist, myTempNamespace) &&
+					InvokeNamespaceSearchHook(myTempNamespace, false))
 					oidlist = lappend_oid(oidlist, myTempNamespace);
 			}
 			else
@@ -3494,7 +3503,8 @@ recomputeNamespacePath(void)
 			if (OidIsValid(namespaceId) &&
 				!list_member_oid(oidlist, namespaceId) &&
 				pg_namespace_aclcheck(namespaceId, roleid,
-									  ACL_USAGE) == ACLCHECK_OK)
+									  ACL_USAGE) == ACLCHECK_OK &&
+				InvokeNamespaceSearchHook(namespaceId, false))
 				oidlist = lappend_oid(oidlist, namespaceId);
 		}
 	}

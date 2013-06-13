@@ -511,8 +511,13 @@ makeDefElemExtended(char *nameSpace, char *name, Node *arg,
 
 /*
  * makeFuncCall -
- *  set up to call a function. DRY!
+ *
+ * Initialize a FuncCall struct with the information every caller must
+ * supply.  Any non-default parameters have to be handled by the
+ * caller.
+ *
  */
+
 FuncCall *
 makeFuncCall(List *name, List *args, int location)
 {
